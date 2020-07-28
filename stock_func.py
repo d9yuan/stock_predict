@@ -3,9 +3,9 @@ import yfinance as yf
 import matplotlib.pyplot as plt
 from yahoo_fin import stock_info as si
 
-def predict(stock_name, yang):
+def predict(stock_name, yang, period_time="10d"):
     stock = yf.Ticker(stock_name)
-    ten_days_data = stock.history(period="10d")
+    ten_days_data = stock.history(period=period_time)
     l = len(ten_days_data)
     real_open = round(si.get_live_price(stock_name), 4)
     real_price = round(si.get_live_price(stock_name), 4)
@@ -44,46 +44,61 @@ def predict_mult(stocks):
         predict(string, yang)
     return yang
 
-def five_year_predict(stock):
+def given_period_predict(stock, period_time="10d", lower_control=True, two_day_lowest_control=True, allow_duplicates=False):
     stock_d = yf.Ticker(stock)
-    five_year_data = stock_d.history(period="5y") 
+    period_time_data = stock_d.history(period=period_time) 
     young = []
-    l = len(five_year_data)
-    for i in range(0, l):
-        if ((five_year_data.iloc[i]["Close"] - five_year_data.iloc[i]["Open"]) > 0):
+    l = len(period_time_data)
+    i = -1
+    while i < l - 1:
+        i += 1
+        if ((period_time_data.iloc[i]["Close"] - period_time_data.iloc[i]["Open"]) > 0):
             m = "Rise"
         else:
             m = "Fall"
         if (m == "Fall"):
-            open_at_fall = five_year_data.iloc[i]["Open"]
+            open_at_fall = period_time_data.iloc[i]["Open"]
             for k in range(i, l):
-                open_today = five_year_data.iloc[k]["Open"]
+                open_today = period_time_data.iloc[k]["Open"]
                 open_at_fall = max(open_today, open_at_fall)
-                if ((five_year_data.iloc[k]["Close"] - five_year_data.iloc[k]["Open"]) > 0):
+                if ((period_time_data.iloc[k]["Close"] - period_time_data.iloc[k]["Open"]) > 0):
                     m1 = "Rise"
                 else:
                     m1 = "Fall"
                 if (k - i < 2):
                     if (m1 == "Rise"):
+                        i = k + 1
                         break
 
                 if (m1 == "Rise"):
-                    if ((five_year_data.iloc[k]["Close"] - open_at_fall) > 0):
+                    if (two_day_lowest_control == True):
+                        if (k >= 2):
+                            lowest_day_ago = period_time_data.iloc[k - 1]["Low"]
+                            lowest_two_days_ago = period_time_data.iloc[k - 2]["Low"]
+                            if (open_today >= lowest_day_ago or open_today >= lowest_two_days_ago):
+                                continue
+                    if (lower_control == False):
                         a = [-1]
-        
                         for s in range(k + 1, min(k + 8, l)):
-                            a.append(five_year_data.iloc[s]["High"])
+                            a.append(period_time_data.iloc[s]["High"])
                         a = max(a)
-                        young.append((five_year_data.iloc[k].name.strftime("%Y-%m-%d"), five_year_data.iloc[k]["Close"], a))
-
-
+                        young.append((period_time_data.iloc[k].name.strftime("%Y-%m-%d"), period_time_data.iloc[k]["Close"], a))
+                    else:
+                        if ((period_time_data.iloc[k]["Close"] - open_at_fall) > 0):
+                            a = [-1]
+                            for s in range(k + 1, min(k + 8, l)):
+                                a.append(period_time_data.iloc[s]["High"])
+                            a = max(a)
+                            young.append((period_time_data.iloc[k].name.strftime("%Y-%m-%d"), period_time_data.iloc[k]["Close"], a))
+                    if (not allow_duplicates):
+                        i = k + 1
                     break
     return young
 
-def mult_five_year_predict(stocks):
+def mult_given_period_predict(stocks, period_time="10d", lower_control=True, two_day_lowest_control=True, allow_duplicates=False):
     retval = []
     for stock in stocks:
-        df = five_year_predict(stock)
+        df = given_period_predict(stock, period_time, lower_control, two_day_lowest_control, allow_duplicates)
         if (len(df) == 0):
             continue
         retval.append((stock, pd.DataFrame(data=df, columns=['date', 'price when fall', 'highest after rise'])))
